@@ -137,7 +137,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Coin
   sr: {fileID: 6591548732524701456}
-  magnetRadius: 2.2
+  magnetRadius: 2.8
   magnetAccel: 30
   maxMagnetSpeed: 14
   collectRadius: 0.45

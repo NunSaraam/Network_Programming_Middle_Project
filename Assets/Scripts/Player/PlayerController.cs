@@ -19,7 +19,7 @@ public class PlayerController : MonoBehaviour
     public WeaponSystem weapon;
 
     [Header("이동")]
-    public float moveSpeed = 7f;
+    public float moveSpeed = 5f;
     public Vector2 screenPadding = new Vector2(0.35f, 0.5f);
 
     [Header("체력 (고정 3칸, 회복 불가)")]
@@ -34,6 +34,16 @@ public class PlayerController : MonoBehaviour
     public bool canShootWhileDiving = false;
     public Color diveTint = new Color(0.25f, 0.35f, 0.9f, 0.35f);
     public float diveScale = 0.8f;
+    [Tooltip("잠수 중 몸 주변에 표시되는 보호막 고리 (코드로 자동 생성)")]
+    public Color diveShieldColor = new Color(0.45f, 1f, 1f, 0.9f);
+    [Tooltip("물고기 크기 대비 보호막 고리 크기 배율")]
+    public float diveShieldSize = 1.3f;
+
+    [Header("헤엄 애니메이션")]
+    public float swimWiggleAngle = 7f;
+    public float swimWiggleSpeed = 7f;
+    [Tooltip("좌우로 움직일 때 몸이 기우는 각도")]
+    public float leanAngle = 18f;
 
     public int Hearts { get; private set; }
     public float DiveGauge { get; private set; }
@@ -54,6 +64,8 @@ public class PlayerController : MonoBehaviour
     float diveVisual;         // 0(수면) ~ 1(심해)
     Color bodyBaseColor = Color.white;
     Vector3 bodyBaseScale = Vector3.one;
+    SpriteRenderer diveShield;
+    float swimT, lean;
 
     void Awake()
     {
@@ -77,7 +89,51 @@ public class PlayerController : MonoBehaviour
             bodyBaseScale = body.transform.localScale;
         }
 
+        CreateDiveShield();
         if (weapon != null) weapon.Setup(FishEvolutionTable.Get(stage), this);
+    }
+
+    float shieldScale = 1f;
+
+    void CreateDiveShield()
+    {
+        // 물고기 이미지 크기(PPU·Body Scale)에 맞춰 고리 크기를 자동으로 정함
+        float fishSize = body != null ? Mathf.Max(body.bounds.size.x, body.bounds.size.y) : 1f;
+        shieldScale = Mathf.Max(0.5f, fishSize) * diveShieldSize;
+
+        var go = new GameObject("DiveShield");
+        go.transform.SetParent(transform, false);
+        go.transform.localScale = Vector3.one * shieldScale;
+        diveShield = go.AddComponent<SpriteRenderer>();
+        diveShield.sprite = ShieldSprite;
+        diveShield.sortingOrder = (body != null ? body.sortingOrder : 0) + 1;
+        diveShield.color = new Color(diveShieldColor.r, diveShieldColor.g, diveShieldColor.b, 0f);
+    }
+
+    static Sprite shieldSprite;
+    /// <summary>빛나는 고리 모양 스프라이트를 코드로 생성 (이미지 파일 불필요)</summary>
+    static Sprite ShieldSprite
+    {
+        get
+        {
+            if (shieldSprite != null) return shieldSprite;
+            const int n = 128;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[n * n];
+            float c = (n - 1) * 0.5f;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / c;
+                    float ring = Mathf.Clamp01(1f - Mathf.Abs(d - 0.86f) / 0.1f);
+                    float fill = d < 0.86f ? 0.22f * d : 0f;
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)(Mathf.Max(ring, fill) * 255));
+                }
+            tex.SetPixels32(px);
+            tex.Apply();
+            shieldSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+            return shieldSprite;
+        }
     }
 
     void OnDestroy()
@@ -152,6 +208,7 @@ public class PlayerController : MonoBehaviour
             {
                 IsDiving = true;
                 SfxPlayer.Play(SfxType.Dive, 0.6f);
+                FloatingText.Spawn(transform.position + Vector3.up * 0.7f, "무적!", diveShieldColor, 4f);
             }
         }
     }
@@ -162,10 +219,29 @@ public class PlayerController : MonoBehaviour
 
         diveVisual = Mathf.MoveTowards(diveVisual, IsDiving ? 1f : 0f, dt * 6f);
 
-        Color c = Color.Lerp(bodyBaseColor, diveTint, diveVisual);
+        // 잠수 중에도 배경에 묻히지 않도록: 색은 살짝만 바꾸고 투명도는 60%까지만
+        Color c = Color.Lerp(bodyBaseColor, diveTint, diveVisual * 0.5f);
+        c.a = bodyBaseColor.a * Mathf.Lerp(1f, 0.6f, diveVisual);
         if (invincibleTimer > 0f && Mathf.Repeat(Time.time * 12f, 1f) < 0.5f) c.a *= 0.3f; // 피격 후 깜빡임
         body.color = c;
-        body.transform.localScale = Vector3.Lerp(bodyBaseScale, bodyBaseScale * diveScale, diveVisual);
+
+        // 헤엄: 꼬리 치듯 좌우로 흔들림 + 움직이는 방향으로 기울기 + 살짝 늘었다 줄었다
+        swimT += dt * swimWiggleSpeed * (1f + moveInput.magnitude * 0.8f);
+        lean = Mathf.Lerp(lean, -moveInput.x * leanAngle, dt * 8f);
+        body.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(swimT) * swimWiggleAngle + lean);
+
+        float squash = 1f + Mathf.Sin(swimT * 2f) * 0.04f;
+        Vector3 s = Vector3.Lerp(bodyBaseScale, bodyBaseScale * diveScale, diveVisual);
+        body.transform.localScale = new Vector3(s.x * squash, s.y / squash, s.z);
+
+        // 보호막 고리: 잠수 중에만 맥박처럼 빛남
+        if (diveShield != null)
+        {
+            float pulse = 0.75f + 0.25f * Mathf.Sin(Time.time * 10f);
+            Color sc = diveShieldColor; sc.a = diveShieldColor.a * diveVisual * pulse;
+            diveShield.color = sc;
+            diveShield.transform.localScale = Vector3.one * shieldScale * (1f + 0.06f * Mathf.Sin(Time.time * 8f));
+        }
     }
 
     // ===== 피격 =====

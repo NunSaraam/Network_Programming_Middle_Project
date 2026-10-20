@@ -24,7 +24,7 @@ public class EnemySpawner : MonoBehaviour
     public float fanShooterFrom = 30f;
 
     [Header("황금 보물 해마")]
-    public Vector2 seahorseInterval = new Vector2(18f, 30f);
+    public Vector2 seahorseInterval = new Vector2(12f, 20f);
 
     [Header("기믹: 산호/암석 장벽")]
     public Barrier barrierPrefab;
@@ -36,23 +36,45 @@ public class EnemySpawner : MonoBehaviour
     public float barrierHeight = 1.2f;
     public float barrierSpeed = 2.4f;
     public float warningTime = 1f;
+    [Tooltip("경고 단계에서 통과할 빈틈을 표시하는 색")]
+    public Color safeZoneColor = new Color(0.3f, 1f, 0.45f, 0.75f);
 
     [Header("난이도 성장 (분당 증가량)")]
     public float hpGrowthPerMinute = 1f;    // 1분마다 적 체력 +100%
     public float goldGrowthPerMinute = 0.5f; // 1분마다 드롭 골드 +50%
 
+    [Header("밸런스 보정")]
+    [Tooltip("모든 적 체력 배율 (0.75 = 25% 감소)")]
+    public float enemyHpScale = 0.75f;
+    [Tooltip("모든 드롭 골드 배율")]
+    public float goldBonus = 1.5f;
+    [Tooltip("첫 황금 해마 등장 시간(초)")]
+    public float firstSeahorseTime = 12f;
+
+    [Header("엘리트 몬스터 (크고 단단하고 골드 많음)")]
+    public float eliteFrom = 40f;
+    [Range(0f, 1f)] public float eliteChance = 0.08f;
+    [Tooltip("이 간격마다 엘리트 1마리 확정 등장")]
+    public float eliteInterval = 45f;
+    public float eliteHpMul = 5f;
+    public float eliteGoldMul = 4f;
+    public float eliteSize = 1.5f;
+    public Color eliteTint = new Color(1f, 0.55f, 1f);
+
     public float Elapsed { get; private set; }
     public float Difficulty => 1f + Elapsed / 60f * hpGrowthPerMinute;
-    float GoldMultiplier => 1f + Elapsed / 60f * goldGrowthPerMinute;
+    float GoldMultiplier => (1f + Elapsed / 60f * goldGrowthPerMinute) * goldBonus;
 
     float spawnTimer = 1f;
     float seahorseTimer;
     float barrierTimer;
+    float eliteTimer;
 
     void Start()
     {
-        seahorseTimer = Random.Range(seahorseInterval.x, seahorseInterval.y);
+        seahorseTimer = firstSeahorseTime;
         barrierTimer = barrierStartTime;
+        eliteTimer = eliteFrom;
     }
 
     void Update()
@@ -75,6 +97,13 @@ public class EnemySpawner : MonoBehaviour
         {
             SpawnSeahorse();
             seahorseTimer = Random.Range(seahorseInterval.x, seahorseInterval.y);
+        }
+
+        eliteTimer -= dt;
+        if (eliteTimer <= 0f)
+        {
+            SpawnGuaranteedElite();
+            eliteTimer = eliteInterval;
         }
 
         if (barrierPrefab != null)
@@ -146,12 +175,24 @@ public class EnemySpawner : MonoBehaviour
                            ScreenBounds.Top + 0.8f);
     }
 
-    Enemy Spawn(Enemy prefab, Vector2 pos)
+    Enemy Spawn(Enemy prefab, Vector2 pos, bool forceElite = false)
     {
         if (prefab == null) return null;
         var e = Instantiate(prefab, pos, Quaternion.identity);
-        e.Init(Difficulty, GoldMultiplier);
+        e.Init(Difficulty, GoldMultiplier, enemyHpScale);
+
+        bool canBeElite = prefab != seahorsePrefab && Elapsed >= eliteFrom;
+        if (forceElite || (canBeElite && Random.value < eliteChance))
+            e.MakeElite(eliteHpMul, eliteGoldMul, eliteSize, eliteTint);
         return e;
+    }
+
+    void SpawnGuaranteedElite()
+    {
+        Enemy prefab = fanShooterPrefab != null ? fanShooterPrefab
+                     : aimedShooterPrefab != null ? aimedShooterPrefab
+                     : rusherPrefab;
+        Spawn(prefab, RandomTopPosition(1.2f), true);
     }
 
     // ===== 장벽 기믹 =====
@@ -167,8 +208,9 @@ public class EnemySpawner : MonoBehaviour
 
         if (warningPrefab != null)
         {
-            ShowWarning(left, gapL);
-            ShowWarning(gapR, right);
+            ShowWarning(left, gapL, null);                 // 위험 구역 (프리팹 색 그대로, 빨강)
+            ShowWarning(gapR, right, null);
+            ShowWarning(gapL, gapR, safeZoneColor);        // 통과할 빈틈 (초록)
         }
 
         yield return new WaitForSeconds(warningTime);
@@ -179,11 +221,13 @@ public class EnemySpawner : MonoBehaviour
         SpawnBarrier(gapR, right + 0.3f, y);
     }
 
-    void ShowWarning(float x0, float x1)
+    void ShowWarning(float x0, float x1, Color? tint)
     {
         if (x1 - x0 < 0.1f) return;
         var w = Instantiate(warningPrefab, new Vector3((x0 + x1) * 0.5f, ScreenBounds.Top - 0.4f, 0f), Quaternion.identity);
         w.transform.localScale = new Vector3(x1 - x0, 0.5f, 1f);
+        if (tint.HasValue)
+            foreach (var r in w.GetComponentsInChildren<SpriteRenderer>()) r.color = tint.Value;
         Destroy(w, warningTime);
     }
 

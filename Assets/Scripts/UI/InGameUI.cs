@@ -62,9 +62,24 @@ public class InGameUI : MonoBehaviour
         }
     }
 
+    float goldPunch;
+    Vector3 goldBaseScale = Vector3.one;
+    bool goldScaleCached;
+
     public void SetGold(int gold)
     {
-        if (goldText != null) goldText.text = $"{gold:N0} G";
+        if (goldText == null) return;
+        goldText.text = $"{gold:N0} G";
+
+        if (!goldScaleCached) { goldBaseScale = goldText.rectTransform.localScale; goldScaleCached = true; }
+        if (gold > 0) goldPunch = 1f; // 획득할 때마다 숫자가 툭 튀어 오름
+    }
+
+    void LateUpdate()
+    {
+        if (goldText == null || goldPunch <= 0f) return;
+        goldPunch = Mathf.Max(0f, goldPunch - Time.unscaledDeltaTime * 6f);
+        goldText.rectTransform.localScale = goldBaseScale * (1f + 0.3f * goldPunch);
     }
 
     public void ShowResult(int runGold, int kills, float time, bool newRecord, int totalGold, int runStage)
@@ -74,8 +89,9 @@ public class InGameUI : MonoBehaviour
 
         if (resultStageText != null)
         {
-            resultStageText.text = GameData.ResetStageOnDeath && runStage > 1
-                ? $"물고기 Lv.{runStage} → Lv.1 초기화"
+            int now = GameData.Stage; // 정산 후 단계 (초기화/체크포인트 반영)
+            resultStageText.text = now < runStage
+                ? $"물고기 Lv.{runStage} → Lv.{now}" + (now > 1 ? " (체크포인트)" : " 초기화")
                 : $"물고기 Lv.{runStage}";
         }
 

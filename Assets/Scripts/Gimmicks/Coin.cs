@@ -92,6 +92,12 @@ public class Coin : MonoBehaviour
         var gm = GameManager.Instance;
         if (gm != null) gm.AddGold(value);
         SfxPlayer.Play(SfxType.Coin, 0.5f);
+
+        // 획득 피드백: "+12 G" (큰 코인일수록 글자도 크게)
+        float size = value >= goldThreshold ? 5f : value >= silverThreshold ? 4.2f : 3.5f;
+        Color textColor = Color.Lerp(sr != null ? sr.color : goldColor, Color.white, 0.25f);
+        FloatingText.Spawn(transform.position + Vector3.up * 0.3f, $"+{value} G", textColor, size);
+
         Destroy(gameObject);
     }
 }

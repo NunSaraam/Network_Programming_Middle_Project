@@ -24,9 +24,9 @@ public static class ScreenBounds
         bottom = Mathf.Min(min.y, max.y); top = Mathf.Max(min.y, max.y);
     }
 
-    public static float Left { get { Ensure(); return left; } }
-    public static float Right { get { Ensure(); return right; } }
-    public static float Top { get { Ensure(); return top; } }
+    public static float Left   { get { Ensure(); return left; } }
+    public static float Right  { get { Ensure(); return right; } }
+    public static float Top    { get { Ensure(); return top; } }
     public static float Bottom { get { Ensure(); return bottom; } }
     public static float Width => Right - Left;
 

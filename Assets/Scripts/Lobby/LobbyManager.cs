@@ -62,9 +62,15 @@ public class LobbyManager : MonoBehaviour
     void Update()
     {
         // 둥실둥실 대기 모션 + 흔들림 + 진화 펀치
-        float bob = Mathf.Sin(Time.unscaledTime * bobSpeed) * bobAmplitude;
+        float t = Time.unscaledTime;
+        float bob = Mathf.Sin(t * bobSpeed) * bobAmplitude;
         fishRect.anchoredPosition = fishBasePos + new Vector2(0f, bob) + shakeOffset;
-        fishRect.localScale = fishBaseScale * StageScale(GameData.Stage) * (1f + punch);
+
+        // 헤엄 애니메이션: 좌우로 꼬리 치듯 흔들림 + 살짝 늘었다 줄었다
+        fishRect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 4f) * 6f);
+        float squash = 1f + Mathf.Sin(t * 8f) * 0.035f;
+        Vector3 s = fishBaseScale * StageScale(GameData.Stage) * (1f + punch);
+        fishRect.localScale = new Vector3(s.x * squash, s.y / squash, s.z);
     }
 
     static float StageScale(int stage) => 1f + (stage - 1) * 0.025f;
@@ -98,13 +104,14 @@ public class LobbyManager : MonoBehaviour
         enhancing = true;
 
         // 골드 차감 + 확률 판정 + 저장을 먼저 끝낸다 (연출 중에 탭을 닫아도 결과 보존)
-        int rate = GameData.CurrentSuccessRate;
+        float rate = GameData.CurrentSuccessRate;
+        float pityPerFail = GameData.CurrentPityPerFail; // 판정 전 단계 기준 (실패 시 이만큼 오름)
         EnhanceResult result = GameData.TryEnhance();
         if (goldText != null) goldText.text = $"{GameData.Gold:N0} G";
 
         // 두근두근: 점점 세게 떨리다가 결과 공개
         if (hintRoutine != null) { StopCoroutine(hintRoutine); hintRoutine = null; }
-        if (hintText != null) hintText.text = $"강화 중...  (성공 확률 {rate}%)";
+        if (hintText != null) hintText.text = $"강화 중...  (성공 확률 {FishEvolutionTable.FormatRate(rate)})";
         if (animRoutine != null) { StopCoroutine(animRoutine); animRoutine = null; punch = 0f; }
         for (float t = 0f; t < enhanceChargeTime; t += Time.unscaledDeltaTime)
         {
@@ -132,7 +139,7 @@ public class LobbyManager : MonoBehaviour
         {
             PlayAnim(FailShake());
             SfxPlayer.Play(SfxType.Fail);
-            ShowTempHint($"강화 실패...  다음 확률 {GameData.CurrentSuccessRate}% (+{FishEvolutionTable.PityBonusPerFail}%)");
+            ShowTempHint($"강화 실패...  다음 확률 {FishEvolutionTable.FormatRate(GameData.CurrentSuccessRate)} (+{FishEvolutionTable.FormatRate(pityPerFail)})");
         }
 
         enhancing = false;
@@ -152,14 +159,19 @@ public class LobbyManager : MonoBehaviour
 
         FishVisuals.Apply(fishImage, stage);
 
-        if (goldText != null) goldText.text = $"{GameData.Gold:N0} G";
+        if (goldText != null)  goldText.text = $"{GameData.Gold:N0} G";
         if (stageText != null) stageText.text = $"Lv.{stage} / {FishEvolutionTable.MaxStage}";
-        if (nameText != null) nameText.text = $"{s.Name} ({s.Habitat})";
-        if (descText != null) descText.text = s.Description;
+        if (nameText != null)  nameText.text = $"{s.Name} ({s.Habitat})";
+        if (descText != null)  descText.text = s.Description;
         if (statText != null)
+        {
+            string keep = GameData.ResetStageOnDeath
+                ? $"  ·  사망 시 Lv.{(GameData.KeepCheckpointOnDeath ? FishEvolutionTable.GetCheckpoint(stage) : 1)}"
+                : "";
             statText.text = $"공격력 {s.Damage:0}   공속 {1f / s.FireInterval:0.0}/s\n" +
-                            $"패턴 {FishEvolutionTable.PatternName(s.Pattern)} x{s.Count}";
-        if (bestText != null) bestText.text = $"최고 Lv.{GameData.BestStage}  ·  {GameData.BestRunGold:N0} G";
+                            $"패턴 {FishEvolutionTable.PatternName(s.Pattern)} x{s.Count}{keep}";
+        }
+        if (bestText != null)  bestText.text = $"최고 Lv.{GameData.BestStage}  ·  {GameData.BestRunGold:N0} G";
 
         bool affordable = false;
         if (costText != null)
@@ -174,9 +186,9 @@ public class LobbyManager : MonoBehaviour
                 int cost = GameData.NextEnhanceCost;
                 affordable = GameData.Gold >= cost;
                 var next = FishEvolutionTable.Get(stage + 1);
-                int bonus = GameData.CurrentPityBonus;
-                string bonusText = bonus > 0 ? $" (+{bonus}%)" : "";
-                costText.text = $"다음: {next.Name}  ·  성공 {GameData.CurrentSuccessRate}%{bonusText}\n강화 비용 {cost:N0} G";
+                float bonus = GameData.CurrentPityBonus;
+                string bonusText = bonus > 0.001f ? $" (+{FishEvolutionTable.FormatRate(bonus)})" : "";
+                costText.text = $"다음: {next.Name}  ·  성공 {FishEvolutionTable.FormatRate(GameData.CurrentSuccessRate)}{bonusText}\n강화 비용 {cost:N0} G";
                 costText.color = affordable ? affordableColor : notEnoughColor;
             }
         }

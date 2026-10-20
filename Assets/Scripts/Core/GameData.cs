@@ -10,14 +10,16 @@ public static class GameData
 {
     public const int StartingGold = 1000;
 
-    /// <summary>true면 사망 시 강화 단계가 1단계로 초기화된다 (골드는 유지)</summary>
+    /// <summary>true면 사망 시 강화 단계가 초기화된다 (골드는 유지)</summary>
     public static bool ResetStageOnDeath = true;
+    /// <summary>true면 1단계가 아니라 도달한 서식지 체크포인트(Lv.6 심해 / Lv.13 환상종)로 돌아간다</summary>
+    public static bool KeepCheckpointOnDeath = true;
 
-    const string KeyInit = "FE_Init";
-    const string KeyGold = "FE_Gold";
-    const string KeyStage = "FE_Stage";
-    const string KeyFail = "FE_FailStacks";
-    const string KeyBest = "FE_BestRunGold";
+    const string KeyInit      = "FE_Init";
+    const string KeyGold      = "FE_Gold";
+    const string KeyStage     = "FE_Stage";
+    const string KeyFail      = "FE_FailStacks";
+    const string KeyBest      = "FE_BestRunGold";
     const string KeyBestStage = "FE_BestStage";
 
     static bool loaded;
@@ -30,9 +32,11 @@ public static class GameData
 
     public static bool IsMaxStage => Stage >= FishEvolutionTable.MaxStage;
     public static int NextEnhanceCost => FishEvolutionTable.GetEnhanceCost(Stage);
-    public static int CurrentSuccessRate => FishEvolutionTable.GetSuccessRate(Stage, FailStacks);
+    public static float CurrentSuccessRate => FishEvolutionTable.GetSuccessRate(Stage, FailStacks);
     /// <summary>실패 보정으로 실제로 더해진 확률(%) (100% 상한 반영)</summary>
-    public static int CurrentPityBonus => CurrentSuccessRate - FishEvolutionTable.GetBaseSuccessRate(Stage);
+    public static float CurrentPityBonus => CurrentSuccessRate - FishEvolutionTable.GetBaseSuccessRate(Stage);
+    /// <summary>현재 단계에서 실패 1회당 오르는 확률(%)</summary>
+    public static float CurrentPityPerFail => FishEvolutionTable.GetPityBonusPerFail(Stage);
 
     public static void Load()
     {
@@ -77,7 +81,9 @@ public static class GameData
         if (Gold < cost) return EnhanceResult.NotEnoughGold;
 
         Gold -= cost;
-        bool success = Random.Range(0, 100) < CurrentSuccessRate;
+        // 0.1% 단위까지 반영되도록 실수로 판정 (Random.value는 1.0도 나올 수 있어 100%는 따로 처리)
+        float rate = CurrentSuccessRate;
+        bool success = rate >= 100f || Random.value * 100f < rate;
         if (success)
         {
             Stage++;
@@ -106,7 +112,7 @@ public static class GameData
 
         if (ResetStageOnDeath)
         {
-            Stage = 1;
+            Stage = KeepCheckpointOnDeath ? FishEvolutionTable.GetCheckpoint(Stage) : 1;
             FailStacks = 0;
         }
 

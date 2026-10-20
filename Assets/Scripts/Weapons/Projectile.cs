@@ -32,7 +32,8 @@ public class Projectile : MonoBehaviour
         this.spin = spin;
         this.split = split;
         transform.localScale = Vector3.one * scale;
-        if (sr != null) sr.color = color;
+        // 바다 배경 위에서 잘 보이도록 단계 색을 밝게 (흰색 쪽으로 35%)
+        if (sr != null) sr.color = Color.Lerp(color, Color.white, 0.35f);
         life = lifeTime;
         hitEnemies.Clear();
     }
