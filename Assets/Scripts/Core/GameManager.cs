@@ -88,6 +88,11 @@ public class GameManager : MonoBehaviour
 
         // 사망 즉시 정산 (탭을 닫아도 골드가 보존되도록 먼저 저장). 강화 단계는 여기서 1단계로 초기화됨
         bool newRecord = GameData.SubmitRun(RunGold);
+
+        // [실습 7] 서버에 한 판 최고 골드 저장. 로그인 전이거나 씬에 GoldSaver 가 없으면 건너뜀.
+        // 매 판 보내되, 서버 기록보다 많을 때만 실제로 덮어씀 (GoldSaver 안에서 비교)
+        if (GoldSaver.Instance != null) GoldSaver.Instance.Save(GameData.BestRunGold);
+
         SfxPlayer.Play(SfxType.GameOver);
         StartCoroutine(GameOverRoutine(newRecord));
     }
