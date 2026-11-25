@@ -33,7 +33,7 @@ public class InGameUI : MonoBehaviour
         if (player != null) player.OnHeartsChanged += RefreshHearts;
 
         if (resultPanel != null) resultPanel.SetActive(false);
-        if (lobbyButton != null) lobbyButton.onClick.AddListener(() => GameManager.Instance.ReturnToLobby());
+        if (lobbyButton != null) lobbyButton.onClick.AddListener(() => GameManager.Instance.Restart()); //ReturnToLobby());
 
         var stage = FishEvolutionTable.Get(GameData.Stage);
         if (stageText != null) stageText.text = $"Lv.{stage.Stage} {stage.Name}";

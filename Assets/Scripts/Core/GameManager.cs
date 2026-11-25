@@ -10,6 +10,11 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance { get; private set; }
     public static bool IsPlaying => Instance != null && Instance.playing;
 
+    static int playCount;
+    static float lastAdTime = -999f;                     // 마지막 전면 광고를 띄운 시각
+    public float adCooldown = 30f;                       // 전면 광고 사이의 최소 간격 (초)
+
+
     [Header("참조")]
     public PlayerController player;
     public InGameUI ui;
@@ -110,4 +115,25 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 1f;
         SceneManager.LoadScene(lobbySceneName);
     }
+
+    public void Restart()                                // 기존 Restart 를 이렇게 교체
+    {
+        playCount++;
+        bool enoughPlays = playCount >= 2;                                       // 첫 판 뒤에는 띄우지 않음
+        bool enoughTime = Time.realtimeSinceStartup - lastAdTime > adCooldown;   // 마지막 광고 뒤 일정 시간
+        if (enoughPlays && enoughTime && DummyAds.Instance.IsInterstitialReady())
+        {
+            lastAdTime = Time.realtimeSinceStartup;
+            DummyAds.Instance.ShowInterstitial(Reload);
+        }
+        else Reload();
+
+    }
+
+    void Reload()                                        // 기존 Restart 의 내용을 여기로
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
 }
